@@ -1,0 +1,234 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>StockSense - Inventory Management</title>
+<style>
+  body{font-family:Arial,sans-serif;background:#f4f6f8;margin:0;padding:0;}
+  header{background:#5b2c6f;color:#fff;padding:15px;text-align:center;font-size:22px;}
+  .container{max-width:900px;margin:20px auto;padding:0 15px;}
+  .card{background:#fff;border-radius:8px;padding:15px;margin-bottom:15px;box-shadow:0 1px 4px rgba(0,0,0,0.1);}
+  nav{display:flex;flex-wrap:wrap;background:#eee;}
+  nav button{flex:1;padding:12px;border:none;background:#eee;cursor:pointer;font-size:14px;}
+  nav button.active{background:#5b2c6f;color:#fff;}
+  input,select{width:100%;padding:8px;margin:5px 0;box-sizing:border-box;border:1px solid #ccc;border-radius:4px;}
+  button.action{background:#5b2c6f;color:#fff;border:none;padding:10px;border-radius:4px;width:100%;margin-top:8px;cursor:pointer;}
+  table{width:100%;border-collapse:collapse;margin-top:10px;font-size:13px;}
+  th,td{border:1px solid #ddd;padding:6px;text-align:left;}
+  th{background:#f0f0f0;}
+  .kpi{display:flex;flex-wrap:wrap;gap:10px;}
+  .kpi div{flex:1;min-width:120px;background:#5b2c6f;color:#fff;padding:15px;border-radius:8px;text-align:center;}
+  .hidden{display:none;}
+  .low{color:red;font-weight:bold;}
+</style>
+</head>
+<body>
+
+<header>📦 StockSense</header>
+
+<!-- LOGIN SCREEN -->
+<div class="container" id="authScreen">
+  <div class="card">
+    <h3 id="authTitle">Login</h3>
+    <input id="authUser" placeholder="Username">
+    <input id="authPass" type="password" placeholder="Password">
+    <button class="action" onclick="login()">Login</button>
+    <button class="action" style="background:#888" onclick="signup()">Sign Up Instead</button>
+    <p id="authMsg" style="color:red"></p>
+  </div>
+</div>
+
+<!-- MAIN APP -->
+<div class="container hidden" id="appScreen">
+  <nav>
+    <button onclick="showTab('dashboard')" id="btn-dashboard">Dashboard</button>
+    <button onclick="showTab('products')" id="btn-products">Products</button>
+    <button onclick="showTab('receipts')" id="btn-receipts">Receipts</button>
+    <button onclick="showTab('deliveries')" id="btn-deliveries">Deliveries</button>
+    <button onclick="showTab('transfers')" id="btn-transfers">Transfers</button>
+    <button onclick="showTab('adjustments')" id="btn-adjustments">Adjustments</button>
+    <button onclick="logout()">Logout</button>
+  </nav>
+
+  <div id="dashboard" class="tab card">
+    <h3>Dashboard</h3>
+    <div class="kpi">
+      <div><h2 id="kpiTotal">0</h2>Total Products</div>
+      <div><h2 id="kpiLow">0</h2>Low Stock</div>
+      <div><h2 id="kpiMoves">0</h2>Total Movements</div>
+    </div>
+    <h4>Move History</h4>
+    <table><thead><tr><th>Type</th><th>Product</th><th>Qty</th><th>Time</th></tr></thead><tbody id="historyBody"></tbody></table>
+  </div>
+
+  <div id="products" class="tab card hidden">
+    <h3>Products</h3>
+    <input id="pName" placeholder="Product Name">
+    <input id="pSKU" placeholder="SKU / Code">
+    <input id="pCat" placeholder="Category">
+    <input id="pStock" type="number" placeholder="Initial Stock">
+    <button class="action" onclick="addProduct()">Add Product</button>
+    <table><thead><tr><th>Name</th><th>SKU</th><th>Category</th><th>Stock</th></tr></thead><tbody id="productBody"></tbody></table>
+  </div>
+
+  <div id="receipts" class="tab card hidden">
+    <h3>Receipts (Incoming Stock)</h3>
+    <select id="rProduct"></select>
+    <input id="rQty" type="number" placeholder="Quantity Received">
+    <button class="action" onclick="addReceipt()">Validate Receipt</button>
+  </div>
+
+  <div id="deliveries" class="tab card hidden">
+    <h3>Delivery Orders (Outgoing Stock)</h3>
+    <select id="dProduct"></select>
+    <input id="dQty" type="number" placeholder="Quantity to Deliver">
+    <button class="action" onclick="addDelivery()">Validate Delivery</button>
+  </div>
+
+  <div id="transfers" class="tab card hidden">
+    <h3>Internal Transfers</h3>
+    <select id="tProduct"></select>
+    <input id="tFrom" placeholder="From Location">
+    <input id="tTo" placeholder="To Location">
+    <input id="tQty" type="number" placeholder="Quantity">
+    <button class="action" onclick="addTransfer()">Transfer</button>
+  </div>
+
+  <div id="adjustments" class="tab card hidden">
+    <h3>Stock Adjustments</h3>
+    <select id="aProduct"></select>
+    <input id="aQty" type="number" placeholder="Counted Quantity">
+    <button class="action" onclick="addAdjustment()">Adjust Stock</button>
+  </div>
+</div>
+
+<script>
+let products = JSON.parse(localStorage.getItem('products')||'[]');
+let history = JSON.parse(localStorage.getItem('history')||'[]');
+let users = JSON.parse(localStorage.getItem('users')||'[]');
+let currentUser = localStorage.getItem('currentUser');
+
+function save(){
+  localStorage.setItem('products', JSON.stringify(products));
+  localStorage.setItem('history', JSON.stringify(history));
+  localStorage.setItem('users', JSON.stringify(users));
+}
+
+function signup(){
+  let u=document.getElementById('authUser').value, p=document.getElementById('authPass').value;
+  if(!u||!p){document.getElementById('authMsg').innerText="Enter username & password";return;}
+  if(users.find(x=>x.u===u)){document.getElementById('authMsg').innerText="User already exists";return;}
+  users.push({u,p}); save();
+  document.getElementById('authMsg').style.color="green";
+  document.getElementById('authMsg').innerText="Signed up! Now login.";
+}
+
+function login(){
+  let u=document.getElementById('authUser').value, p=document.getElementById('authPass').value;
+  let found=users.find(x=>x.u===u && x.p===p);
+  if(!found){document.getElementById('authMsg').style.color="red";document.getElementById('authMsg').innerText="Invalid credentials";return;}
+  currentUser=u; localStorage.setItem('currentUser',u);
+  document.getElementById('authScreen').classList.add('hidden');
+  document.getElementById('appScreen').classList.remove('hidden');
+  showTab('dashboard');
+}
+
+function logout(){
+  currentUser=null; localStorage.removeItem('currentUser');
+  document.getElementById('authScreen').classList.remove('hidden');
+  document.getElementById('appScreen').classList.add('hidden');
+}
+
+function showTab(tab){
+  document.querySelectorAll('.tab').forEach(t=>t.classList.add('hidden'));
+  document.getElementById(tab).classList.remove('hidden');
+  document.querySelectorAll('nav button').forEach(b=>b.classList.remove('active'));
+  let btn=document.getElementById('btn-'+tab); if(btn) btn.classList.add('active');
+  renderAll();
+}
+
+function addProduct(){
+  let name=document.getElementById('pName').value;
+  let sku=document.getElementById('pSKU').value;
+  let cat=document.getElementById('pCat').value;
+  let stock=parseInt(document.getElementById('pStock').value)||0;
+  if(!name||!sku){alert('Enter name and SKU');return;}
+  products.push({name,sku,cat,stock});
+  save(); renderAll();
+  document.getElementById('pName').value='';document.getElementById('pSKU').value='';
+  document.getElementById('pCat').value='';document.getElementById('pStock').value='';
+}
+
+function logMove(type,name,qty){
+  history.unshift({type,name,qty,time:new Date().toLocaleString()});
+  save();
+}
+
+function addReceipt(){
+  let i=document.getElementById('rProduct').value;
+  let qty=parseInt(document.getElementById('rQty').value);
+  if(i===''||!qty){alert('Select product and quantity');return;}
+  products[i].stock+=qty;
+  logMove('Receipt',products[i].name,'+'+qty);
+  save(); renderAll();
+}
+
+function addDelivery(){
+  let i=document.getElementById('dProduct').value;
+  let qty=parseInt(document.getElementById('dQty').value);
+  if(i===''||!qty){alert('Select product and quantity');return;}
+  products[i].stock-=qty;
+  logMove('Delivery',products[i].name,'-'+qty);
+  save(); renderAll();
+}
+
+function addTransfer(){
+  let i=document.getElementById('tProduct').value;
+  let from=document.getElementById('tFrom').value;
+  let to=document.getElementById('tTo').value;
+  let qty=document.getElementById('tQty').value;
+  if(i===''||!from||!to||!qty){alert('Fill all fields');return;}
+  logMove('Transfer',products[i].name+' ('+from+'→'+to+')',qty);
+  save(); renderAll();
+}
+
+function addAdjustment(){
+  let i=document.getElementById('aProduct').value;
+  let counted=parseInt(document.getElementById('aQty').value);
+  if(i===''||isNaN(counted)){alert('Select product and counted qty');return;}
+  let diff=counted-products[i].stock;
+  products[i].stock=counted;
+  logMove('Adjustment',products[i].name,(diff>=0?'+':'')+diff);
+  save(); renderAll();
+}
+
+function renderAll(){
+  // product table
+  let pb=document.getElementById('productBody'); pb.innerHTML='';
+  products.forEach(p=>{
+    pb.innerHTML+=`<tr><td>${p.name}</td><td>${p.sku}</td><td>${p.cat}</td><td class="${p.stock<5?'low':''}">${p.stock}</td></tr>`;
+  });
+  // dropdowns
+  ['rProduct','dProduct','tProduct','aProduct'].forEach(id=>{
+    let sel=document.getElementById(id); sel.innerHTML='<option value="">Select Product</option>';
+    products.forEach((p,i)=>{ sel.innerHTML+=`<option value="${i}">${p.name} (Stock: ${p.stock})</option>`; });
+  });
+  // dashboard
+  document.getElementById('kpiTotal').innerText=products.length;
+  document.getElementById('kpiLow').innerText=products.filter(p=>p.stock<5).length;
+  document.getElementById('kpiMoves').innerText=history.length;
+  let hb=document.getElementById('historyBody'); hb.innerHTML='';
+  history.slice(0,20).forEach(h=>{
+    hb.innerHTML+=`<tr><td>${h.type}</td><td>${h.name}</td><td>${h.qty}</td><td>${h.time}</td></tr>`;
+  });
+}
+
+// auto-login if already logged in
+if(currentUser){
+  document.getElementById('authScreen').classList.add('hidden');
+  document.getElementById('appScreen').classList.remove('hidden');
+  showTab('dashboard');
+}
+</script>
+</body>
+</html>
